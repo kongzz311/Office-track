@@ -1,138 +1,348 @@
-<script>
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth(); // 0 = January
-  const calendar = document.getElementById('calendar');
-  const monthLabel = document.getElementById('month-label');
-  const info = document.getElementById('attendance-info');
-
-  const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  const STORAGE_KEY = `attendance-${year}-${month + 1}`;
-
-  function saveData(data) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }
-
-  function loadData() {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  }
-
-  const statusData = loadData();
-
-  function generateCalendar(year, month) {
-    calendar.innerHTML = '';
-    monthLabel.innerText = `${year} 年 ${month + 1} 月`;
-
-    // Add weekday headers
-    weekdayNames.forEach(d => {
-      const label = document.createElement('div');
-      label.innerText = d;
-      label.style.fontWeight = 'bold';
-      calendar.appendChild(label);
-    });
-
-    const firstDay = new Date(year, month, 1);
-    const startDay = firstDay.getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    // Empty slots before first day
-    for (let i = 0; i < startDay; i++) {
-      calendar.appendChild(document.createElement('div'));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Attendance Calendar | Office/OOO/WFH Tracker</title>
+  <meta name="description" content="A local-storage based visual attendance calendar for tracking Office days, OOO (Out of Office), and WFH (Work From Home). Automatically calculates your attendance rate. No login required; data is saved locally in your browser." />
+  <meta name="keywords" content="attendance calendar, office attendance, OOO tracker, WFH tracker, local storage attendance, work attendance calendar, online attendance tracker" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background: #fafafa;
+      color: #222;
+    }
+    h1 {
+      margin-bottom: 5px;
+    }
+    .description {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 15px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .legend {
+      margin: 10px auto 20px auto;
+      font-size: 14px;
+      display: flex;
+      justify-content: center;
+      gap: 25px;
+      flex-wrap: wrap;
+      max-width: 600px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    .legend-box {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    .legend-office {
+      background: #4caf50;
+    }
+    .legend-ooo {
+      background: #f44336;
+    }
+    .legend-wfh {
+      background: white;
+      border: 1px solid #ccc;
+    }
+    .legend-today {
+      border: 2px solid red;
+      background: white;
+      box-sizing: border-box;
     }
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
+    .nav-buttons {
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    .nav-buttons button {
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #888;
+      background: white;
+      transition: background-color 0.2s ease;
+    }
+    .nav-buttons button:hover {
+      background-color: #eaeaea;
+    }
 
-      const div = document.createElement('div');
-      div.classList.add('day');
-      div.innerText = day;
-      div.dataset.date = dateStr;
+    #month-label {
+      font-weight: bold;
+      font-size: 18px;
+      user-select: none;
+      min-width: 140px;
+    }
 
-      // 初始化状态
-      let savedStatus = statusData[dateStr];
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        if (!savedStatus) {
-          savedStatus = 'wfh'; // 默认是 WFH
-        }
-        div.dataset.type = savedStatus;
-        applyStyle(div, savedStatus);
-      } else {
-        div.classList.add('weekend');
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      max-width: 600px;
+      margin: 0 auto 20px auto;
+    }
+    .day {
+      padding: 10px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      border-radius: 4px;
+      user-select: none;
+      background: white;
+      transition: background-color 0.2s ease;
+    }
+    .day:hover {
+      filter: brightness(95%);
+    }
+    .weekend {
+      background-color: #f0f0f0;
+      cursor: default;
+    }
+    .in-office {
+      background-color: #4caf50;
+      color: white;
+    }
+    .ooo {
+      background-color: #f44336;
+      color: white;
+    }
+    .today {
+      border: 2px solid red !important;
+    }
+    .info {
+      margin-top: 10px;
+      font-size: 16px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Attendance Calendar</h1>
+  <div class="description">
+    Track your monthly attendance easily with this visual calendar. Click dates to mark yourself as <strong>In Office (green)</strong>, <strong>OOO (red)</strong>, or <strong>WFH (default, white)</strong>. Your data is stored <em>locally in your browser</em>—no accounts or sign-in needed. Use the buttons below to switch months or clear current month data.
+  </div>
+
+  <div class="legend" aria-label="Legend for attendance status colors">
+    <div class="legend-item"><div class="legend-box legend-office"></div> In Office</div>
+    <div class="legend-item"><div class="legend-box legend-ooo"></div> OOO (Out of Office)</div>
+    <div class="legend-item"><div class="legend-box legend-wfh"></div> WFH (Work From Home)</div>
+    <div class="legend-item"><div class="legend-box legend-today"></div> Today</div>
+  </div>
+
+  <div class="nav-buttons">
+    <button type="button" onclick="changeMonth(-1)">← Previous Month</button>
+    <span id="month-label" aria-live="polite" aria-atomic="true"></span>
+    <button type="button" onclick="changeMonth(1)">Next Month →</button>
+  </div>
+  <div class="nav-buttons">
+    <button type="button" onclick="clearCurrentMonth()" style="background:#f44336;color:#fff;border:none;">Clear Current Month Data</button>
+  </div>
+
+  <div class="calendar" id="calendar" role="grid" aria-label="Attendance Calendar"></div>
+
+  <div class="info" id="attendance-info" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    let currentDate = new Date();
+    const calendar = document.getElementById('calendar');
+    const monthLabel = document.getElementById('month-label');
+    const info = document.getElementById('attendance-info');
+    const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Return a unique key for localStorage per year-month
+    function getStorageKey(year, month) {
+      return `attendance-${year}-${month + 1}`;
+    }
+
+    function saveData(data, year, month) {
+      localStorage.setItem(getStorageKey(year, month), JSON.stringify(data));
+    }
+
+    function loadData(year, month) {
+      const raw = localStorage.getItem(getStorageKey(year, month));
+      return raw ? JSON.parse(raw) : {};
+    }
+
+    function changeMonth(offset) {
+      currentDate.setMonth(currentDate.getMonth() + offset);
+      generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+    }
+
+    // Get local date string in Shanghai timezone (UTC+8)
+    function getLocalDateString(offsetHours = 8) {
+      const now = new Date();
+      const local = new Date(now.getTime() + offsetHours * 60 * 60 * 1000);
+      return local.toISOString().split('T')[0];
+    }
+
+    function generateCalendar(year, month) {
+      const statusData = loadData(year, month);
+      calendar.innerHTML = '';
+
+      // Show month label: e.g. "July 2025"
+      monthLabel.innerText = new Date(year, month).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long'
+      });
+
+      // Add weekday headers
+      weekdayNames.forEach(d => {
+        const label = document.createElement('div');
+        label.innerText = d;
+        label.style.fontWeight = 'bold';
+        label.style.userSelect = 'none';
+        calendar.appendChild(label);
+      });
+
+      const firstDay = new Date(year, month, 1, 12); // noon to avoid timezone issues
+      const startDay = firstDay.getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const todayStr = getLocalDateString(8); // Shanghai UTC+8
+
+      // Empty grid cells for days before the first day of month
+      for (let i = 0; i < startDay; i++) {
+        calendar.appendChild(document.createElement('div'));
       }
 
-      div.addEventListener('click', () => toggleStatus(div));
-      calendar.appendChild(div);
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day, 12);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayOfWeek = date.getDay();
+
+        const div = document.createElement('div');
+        div.classList.add('day');
+        div.innerText = day;
+        div.dataset.date = dateStr;
+
+        if (dateStr === todayStr) {
+          div.classList.add('today');
+        }
+
+        let savedStatus = statusData[dateStr];
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          // Weekday: default WFH if not set
+          if (!savedStatus) savedStatus = 'wfh';
+          div.dataset.type = savedStatus;
+          applyStyle(div, savedStatus);
+          div.tabIndex = 0; // keyboard focusable
+          div.setAttribute('role', 'button');
+          div.setAttribute('aria-pressed', savedStatus === 'in-office' ? 'true' : 'false');
+        } else {
+          // Weekend greyed out and not clickable
+          div.classList.add('weekend');
+          div.style.cursor = 'default';
+        }
+
+        div.addEventListener('click', () => {
+          if (dayOfWeek === 0 || dayOfWeek === 6) return; // no change on weekend
+          toggleStatus(div, statusData, year, month);
+        });
+        div.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            div.click();
+          }
+        });
+
+        calendar.appendChild(div);
+      }
+
+      updateAttendance(statusData, year, month);
     }
 
-    updateAttendance();
-  }
-
-  function toggleStatus(div) {
-    const type = div.dataset.type;
-    const dateStr = div.dataset.date;
-
-    let nextType;
-    if (!type || type === 'wfh') {
-      nextType = 'in-office';
-    } else if (type === 'in-office') {
-      nextType = 'ooo';
-    } else {
-      nextType = 'wfh';
-    }
-
-    div.dataset.type = nextType;
-    applyStyle(div, nextType);
-
-    // 更新 localStorage
-    statusData[dateStr] = nextType;
-    saveData(statusData);
-
-    updateAttendance();
-  }
-
-  function applyStyle(div, type) {
-    div.classList.remove('in-office', 'ooo');
-    if (type === 'in-office') {
-      div.classList.add('in-office');
-    } else if (type === 'ooo') {
-      div.classList.add('ooo');
-    }
-  }
-
-  function updateAttendance() {
-    const allDays = document.querySelectorAll('.day');
-    let officeDays = 0;
-    let oooDays = 0;
-    let workingDayCount = 0;
-
-    allDays.forEach(div => {
+    function toggleStatus(div, statusData, year, month) {
       const type = div.dataset.type;
       const dateStr = div.dataset.date;
-      if (!dateStr) return;
 
-      const day = new Date(dateStr).getDay();
-      if (day !== 0 && day !== 6) {
-        workingDayCount++;
-        if (type === 'in-office') officeDays++;
-        if (type === 'ooo') oooDays++;
+      let nextType;
+      if (!type || type === 'wfh') {
+        nextType = 'in-office';
+      } else if (type === 'in-office') {
+        nextType = 'ooo';
+      } else {
+        nextType = 'wfh';
       }
-    });
 
-    const attendanceRate = workingDayCount > 0 
-      ? ((officeDays / workingDayCount) * 100).toFixed(1) 
-      : 0;
+      div.dataset.type = nextType;
+      applyStyle(div, nextType);
+      div.setAttribute('aria-pressed', nextType === 'in-office' ? 'true' : 'false');
 
-    info.innerHTML = `
-      总工作日: ${workingDayCount} 天<br>
-      在办公室: ${officeDays} 天<br>
-      OOO: ${oooDays} 天<br>
-      出勤率: ${attendanceRate}%（仅统计工作日）
-    `;
-  }
+      statusData[dateStr] = nextType;
+      saveData(statusData, year, month);
+      updateAttendance(statusData, year, month);
+    }
 
-  generateCalendar(year, month);
-</script>
+    function applyStyle(div, type) {
+      div.classList.remove('in-office', 'ooo');
+      if (type === 'in-office') {
+        div.classList.add('in-office');
+      } else if (type === 'ooo') {
+        div.classList.add('ooo');
+      }
+    }
+
+    function updateAttendance(statusData, year, month) {
+      const allDays = document.querySelectorAll('.day');
+      let officeDays = 0;
+      let oooDays = 0;
+      let workingDayCount = 0;
+
+      allDays.forEach(div => {
+        const type = div.dataset.type;
+        const dateStr = div.dataset.date;
+        if (!dateStr) return;
+
+        const day = new Date(dateStr).getDay();
+        if (day !== 0 && day !== 6) {
+          workingDayCount++;
+          if (type === 'in-office') officeDays++;
+          if (type === 'ooo') oooDays++;
+        }
+      });
+
+      const attendanceRate = workingDayCount > 0
+        ? ((officeDays / (workingDayCount-oooDays)) * 100).toFixed(1)
+        : 0;
+
+
+      info.innerHTML = `
+        Total Working Days: ${workingDayCount}<br>
+        Days In Office: ${officeDays}<br>
+        OOO Days: ${oooDays}<br>
+        Attendance Rate: ${officeDays} / (${workingDayCount}-${oooDays}) = ${attendanceRate}% (Weekdays only)
+      `;
+
+      
+      
+    }
+
+    // Clear current month data from localStorage and refresh calendar
+    function clearCurrentMonth() {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const key = getStorageKey(year, month);
+      localStorage.removeItem(key);
+      generateCalendar(year, month);
+    }
+
+    // Initialize on load
+    generateCalendar(currentDate.getFullYear(), currentDate.getMonth());
+  </script>
+</body>
+</html>
