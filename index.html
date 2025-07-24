@@ -1,0 +1,138 @@
+<script>
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth(); // 0 = January
+  const calendar = document.getElementById('calendar');
+  const monthLabel = document.getElementById('month-label');
+  const info = document.getElementById('attendance-info');
+
+  const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const STORAGE_KEY = `attendance-${year}-${month + 1}`;
+
+  function saveData(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function loadData() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  const statusData = loadData();
+
+  function generateCalendar(year, month) {
+    calendar.innerHTML = '';
+    monthLabel.innerText = `${year} 年 ${month + 1} 月`;
+
+    // Add weekday headers
+    weekdayNames.forEach(d => {
+      const label = document.createElement('div');
+      label.innerText = d;
+      label.style.fontWeight = 'bold';
+      calendar.appendChild(label);
+    });
+
+    const firstDay = new Date(year, month, 1);
+    const startDay = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Empty slots before first day
+    for (let i = 0; i < startDay; i++) {
+      calendar.appendChild(document.createElement('div'));
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay();
+
+      const div = document.createElement('div');
+      div.classList.add('day');
+      div.innerText = day;
+      div.dataset.date = dateStr;
+
+      // 初始化状态
+      let savedStatus = statusData[dateStr];
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        if (!savedStatus) {
+          savedStatus = 'wfh'; // 默认是 WFH
+        }
+        div.dataset.type = savedStatus;
+        applyStyle(div, savedStatus);
+      } else {
+        div.classList.add('weekend');
+      }
+
+      div.addEventListener('click', () => toggleStatus(div));
+      calendar.appendChild(div);
+    }
+
+    updateAttendance();
+  }
+
+  function toggleStatus(div) {
+    const type = div.dataset.type;
+    const dateStr = div.dataset.date;
+
+    let nextType;
+    if (!type || type === 'wfh') {
+      nextType = 'in-office';
+    } else if (type === 'in-office') {
+      nextType = 'ooo';
+    } else {
+      nextType = 'wfh';
+    }
+
+    div.dataset.type = nextType;
+    applyStyle(div, nextType);
+
+    // 更新 localStorage
+    statusData[dateStr] = nextType;
+    saveData(statusData);
+
+    updateAttendance();
+  }
+
+  function applyStyle(div, type) {
+    div.classList.remove('in-office', 'ooo');
+    if (type === 'in-office') {
+      div.classList.add('in-office');
+    } else if (type === 'ooo') {
+      div.classList.add('ooo');
+    }
+  }
+
+  function updateAttendance() {
+    const allDays = document.querySelectorAll('.day');
+    let officeDays = 0;
+    let oooDays = 0;
+    let workingDayCount = 0;
+
+    allDays.forEach(div => {
+      const type = div.dataset.type;
+      const dateStr = div.dataset.date;
+      if (!dateStr) return;
+
+      const day = new Date(dateStr).getDay();
+      if (day !== 0 && day !== 6) {
+        workingDayCount++;
+        if (type === 'in-office') officeDays++;
+        if (type === 'ooo') oooDays++;
+      }
+    });
+
+    const attendanceRate = workingDayCount > 0 
+      ? ((officeDays / workingDayCount) * 100).toFixed(1) 
+      : 0;
+
+    info.innerHTML = `
+      总工作日: ${workingDayCount} 天<br>
+      在办公室: ${officeDays} 天<br>
+      OOO: ${oooDays} 天<br>
+      出勤率: ${attendanceRate}%（仅统计工作日）
+    `;
+  }
+
+  generateCalendar(year, month);
+</script>
